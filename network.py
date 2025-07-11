@@ -3,7 +3,7 @@ import socket
 class Network:
     def __init__(self):
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.server = "10.0.0.14"  # Change to your server IP
+        self.server = "193.157.173.185"  # Change to your server IP
         self.port = 5555
         self.addr = (self.server, self.port)
         self.player_id = -1
