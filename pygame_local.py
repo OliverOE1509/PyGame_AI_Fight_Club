@@ -15,11 +15,12 @@ colors = {
     'grid': (200, 200, 200), # black
     'agent1': (0, 255, 0), # green
     'agent2': (0, 0, 255), # blue
-    'bullet': (255, 0, 0) # 'red
+    'bullet': (255, 0, 0), # 'red
+    'health': (255, 0, 0)
 }
 
 class Agent:
-    def __init__(self, x, y, color, dx, shoot_key):
+    def __init__(self, x, y, color, dx, shoot_key, player_id):
         self.x = x
         self.y = y
         self.color = color
@@ -30,10 +31,45 @@ class Agent:
         # timer mellom hvert skudd
         self.last_shot = 0
         self.shot_cooldown = 500  # I millisekunder. 500 = 1/2 sekunder
+        self.health = 3
+        self.alive = True
+        self.hit_cooldown = 0
+        self.hit_time = 0
+        self.player_id = player_id
+
+    def check_bullet_collision(self, bullet):
+        if not self.alive:
+            return False
+            
+        now = pygame.time.get_ticks()
+        if now - self.hit_time < self.hit_cooldown:
+            return False
+            
+        if (abs(self.x - bullet.x) < 1 and abs(self.y - bullet.y) < 1):
+            self.health -= 1
+            self.hit_time = now
+            if self.health <= 0:
+                self.alive = False
+            return True
+        return False
 
     def draw(self):
-        pygame.draw.rect(screen, self.color, 
-                         (self.x * cell_size, self.y * cell_size, cell_size, cell_size))
+        # Flash when hit
+        now = pygame.time.get_ticks()
+        if now - self.hit_time < 200 and self.alive:
+            flash_color = (255, 255, 255)  # White flash
+        else:
+            flash_color = self.color
+            
+        pygame.draw.rect(screen, flash_color, 
+                        (self.x * cell_size, self.y * cell_size, cell_size, cell_size))
+        
+        # Draw health bar
+        if self.alive:
+            health_width = (cell_size * self.health) / 3
+            pygame.draw.rect(screen, colors['health'],
+                           (self.x * cell_size, self.y * cell_size - 10,
+                            health_width, 5))
         
     def move(self, dy):
         new_y = self.y + dy
@@ -53,6 +89,10 @@ class Agent:
             if bullet.off_screen():
                 self.bullets.remove(bullet)
 
+    def update_position(self, x, y):
+        self.x = x
+        self.y = y
+
 
 class Bullet:
     def __init__(self, x, y, dx, dy):
@@ -60,7 +100,16 @@ class Bullet:
         self.y = y
         self.dx = dx
         self.dy = dy
-        self.image = pygame.transform.scale(bullet_img, (cell_size // 2, cell_size // 2))
+        #self.image = pygame.transform.scale(bullet_img, (cell_size // 2, cell_size // 2))
+        try:
+            bullet_path = os.path.join(ASSETS_PATH, 'bullet_img.png')
+            self.image = pygame.image.load(bullet_path).convert_alpha()
+            self.image = pygame.transform.scale(self.image, (cell_size // 2, cell_size // 2))
+        except:
+            self.image = pygame.Surface((cell_size // 2, cell_size // 2), pygame.SRCALPHA)
+            pygame.draw.circle(self.image, (255, 0, 0), 
+                             (cell_size // 4, cell_size // 4), 
+                             cell_size // 4)
     
     def move(self):
         self.x += self.dx
@@ -121,106 +170,130 @@ def draw_help_box(screen, font):
         screen.blit(text, (box_x + 20, text_y))
         text_y += 30
 
+def draw_game_over(screen, font, winner):
+    overlay = pygame.Surface((screen_width, screen_height), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 180))
+    screen.blit(overlay, (0, 0))
+    
+    text = font.render(f"Player {winner + 1} wins!", True, (255, 255, 0))
+    text_rect = text.get_rect(center=(screen_width // 2, screen_height // 2 - 30))
+    screen.blit(text, text_rect)
+
+    restart_text = font.render("Press R to restart", True, (255, 255, 255))
+    restart_rect = restart_text.get_rect(center=(screen_width // 2, screen_height // 2 + 30))
+    screen.blit(restart_text, restart_rect)
+
 def main():
-    global bullet_img
     try:
-        bullet_path = os.path.join(ASSETS_PATH, 'bullet_img.png')
-        bullet_img = pygame.image.load(bullet_path).convert_alpha()
-        # Scale to appropriate size (about 1/2 to 2/3 of cell_size works well)
-        #bullet_img = pygame.transform.scale(bullet_img, (cell_size // 2, cell_size // 2))
+        global bullet_img
+        try:
+            bullet_path = os.path.join(ASSETS_PATH, 'bullet_img.png')
+            bullet_img = pygame.image.load(bullet_path).convert_alpha()
+            # Scale to appropriate size (about 1/2 to 2/3 of cell_size works well)
+            #bullet_img = pygame.transform.scale(bullet_img, (cell_size // 2, cell_size // 2))
+        except Exception as e:
+            bullet_image = pygame.Surface((cell_size, cell_size), pygame.SRCALPHA)
+            pygame.draw.circle(bullet_image, (255, 0, 0), 
+                            (cell_size // 4, cell_size // 4), 
+                            cell_size // 4)
+
+        clock = pygame.time.Clock()
+        font = pygame.font.SysFont('Arial', 20)
+        agent = Agent(3, 10, colors['agent1'], dx = 1, shoot_key = pygame.K_SPACE, player_id = 0)
+        opponent = Agent(16, 10, colors['agent2'], dx = -1, shoot_key = pygame.K_RETURN, player_id = 1)
+        running = True
+        clock = pygame.time.Clock()
+        font = pygame.font.SysFont('Arial', 24, bold=True)
+        running = True
+        show_help = True
+        game_over = False
+        winner = None
+
+        while running:
+
+            #print(previous_time)
+            current_time = pygame.time.get_ticks()
+
+            for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                    elif event.type == pygame.KEYDOWN:
+                        if show_help:
+                            show_help = False
+                        elif game_over and event.key == pygame.K_r:
+                            return main()
+                        elif event.key == pygame.K_ESCAPE:
+                            running = False
+
+            if game_over:
+                screen.fill(colors['background'])
+                draw_grid()
+                agent.draw()
+                opponent.draw()
+                draw_game_over(screen, font, winner)
+                pygame.display.flip()
+                continue
+
+            if not show_help:
+                keys = pygame.key.get_pressed()
+
+                # agent 1
+                if keys[pygame.K_w]:
+                    agent.move(-1)
+                if keys[pygame.K_s]:
+                    agent.move(1)
+                if keys[agent.shoot_key]:
+                    agent.shoot()
+
+                # agent 2
+                if keys[pygame.K_UP]:
+                    opponent.move(-1)
+                if keys[pygame.K_DOWN]:
+                    opponent.move(1)
+                if keys[opponent.shoot_key]:
+                    opponent.shoot()
+            
+            agent.update_bullets()
+            opponent.update_bullets()
+        
+            for bullet in agent.bullets[:]:
+                if opponent.check_bullet_collision(bullet):
+                    agent.bullets.remove(bullet)
+                    if not opponent.alive:
+                        game_over = True
+                        winner = agent.player_id
+                        #try:
+                        #    n.send("GAME_OVER")
+                        #except:
+                        #    pass
+
+            for bullet in opponent.bullets[:]:
+                if agent.check_bullet_collision(bullet):
+                    opponent.bullets.remove(bullet)
+                    if not agent.alive:
+                        game_over = True
+                        winner = opponent.player_id
+                        #try:
+                        #    n.send("GAME_OVER")
+                        #except:
+                        #    pass
+
+            screen.fill(colors['background'])
+            draw_grid()
+            agent.draw()
+            opponent.draw()
+            agent.update_bullets()
+            opponent.update_bullets()
+
+            if show_help:
+                draw_help_box(screen, font)
+
+            pygame.display.flip()
+            clock.tick(20)
     except Exception as e:
-        bullet_image = pygame.Surface((cell_size, cell_size), pygame.SRCALPHA)
-        pygame.draw.circle(bullet_image, (255, 0, 0), 
-                          (cell_size // 4, cell_size // 4), 
-                          cell_size // 4)
-
-    clock = pygame.time.Clock()
-    font = pygame.font.SysFont('Arial', 20)
-    agent1 = Agent(3, 10, colors['agent1'], dx = 1, shoot_key = pygame.K_SPACE)
-    agent2 = Agent(16, 10, colors['agent2'], dx = -1, shoot_key = pygame.K_RETURN)
-    bullets = []
-    
-    running = True
-    FPS = 60
-    previous_time = pygame.time.get_ticks()
-    dt = 0
-    timer = 0
-    record = 0
-    passed, start = False, False
-    show_help = True
-    help_time = 0
-    #print(previous_time)
-
-    #player_pos = pygame.Vector2(screen.get_width() / 2, screen.get_height() / 2)
-
-    while running:
-        #print(previous_time)
-
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            elif event.type == pygame.KEYDOWN and show_help:
-                show_help = False
-
-
-        now = time.time()
-        dt = now - previous_time
-        now = previous_time
-
-        if not show_help:
-            keys = pygame.key.get_pressed()
-
-            # agent 1
-            if keys[pygame.K_w]:
-                agent1.move(-1)
-            if keys[pygame.K_s]:
-                agent1.move(1)
-            if keys[agent1.shoot_key]:
-                agent1.shoot()
-
-            # agent 2
-            if keys[pygame.K_UP]:
-                agent2.move(-1)
-            if keys[pygame.K_DOWN]:
-                agent2.move(1)
-            if keys[agent2.shoot_key]:
-                agent2.shoot()
-        
-        
-    
-        screen.fill(colors['background'])
-        draw_grid()
-        agent1.draw()
-        agent2.draw()
-        agent1.update_bullets()
-        agent2.update_bullets()
-
-        if show_help:
-            if help_time == 0:
-                help_time = pygame.time.get_ticks()
-            draw_help_box(screen, font)
-
-        ##start_time = pygame.time.get_ticks()
-        #daw_instruction_box(start_time)
-
-        pygame.display.flip()
-        clock.tick(20)
-
-    #pygame.draw.circle(screen, 'red', player_pos, 40)
-
-    #keys = pygame.key.get_pressed()
-    #if keys[pygame.K_w]:
-    #    player_pos.y -= 300 * dt
-    #if keys[pygame.K_s]:
-    #    player_pos.y += 300 * dt
-    #if keys[pygame.K_a]:
-    #    player_pos.x -= 300 * dt
-    #if keys[pygame.K_d]:
-    #    player_pos.x += 300 * dt
-    #pygame.display.flip()
-    #dt = clock.tick(1000) / 1000
-
-    pygame.quit()
+        print(f'Game error: {e}')
+    finally:
+        pygame.quit()
 
 if __name__ == "__main__":
     main()
