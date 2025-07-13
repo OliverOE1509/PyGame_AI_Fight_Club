@@ -42,6 +42,8 @@ class Agent:
         self.hit_time = 0
 
     def check_bullet_collision(self, bullet):
+        if bullet.owner_id == self.player_id:
+            return False
         if not self.alive:
             return False
             
@@ -83,7 +85,7 @@ class Agent:
     def shoot(self):
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.shot_cooldown and self.alive:
-            self.bullets.append(Bullet(self.x, self.y, self.dx, 0))
+            self.bullets.append(Bullet(self.x, self.y, self.dx, 0, self.player_id))
             self.last_shot = now
 
     def update_bullets(self):
@@ -98,11 +100,12 @@ class Agent:
         self.y = y
 
 class Bullet:
-    def __init__(self, x, y, dx, dy):
+    def __init__(self, x, y, dx, dy, owner_id):
         self.x = x
         self.y = y
         self.dx = dx * 0.5  # Slower bullets
         self.dy = dy * 0.5
+        self.owner_id = owner_id
         try:
             bullet_path = os.path.join(ASSETS_PATH, 'bullet_img.png')
             self.image = pygame.image.load(bullet_path).convert_alpha()
@@ -219,11 +222,8 @@ def main():
                 pygame.display.flip()
                 continue
 
-            # Movement controls
             if not show_help:
                 keys = pygame.key.get_pressed()
-                
-                # Both players use same controls now
                 if keys[pygame.K_w]:
                     agent.move(-1)
                 if keys[pygame.K_s]:
@@ -231,22 +231,57 @@ def main():
                 if keys[pygame.K_SPACE]:
                     agent.shoot()
 
-            # Network communication with throttling
+            # Network communication
             if current_time - last_network_time > network_delay:
                 try:
-                    pos_data = f"{agent.x},{agent.y}"
+                    pos_data = f"{int(agent.x)},{int(agent.y)}"
+                    if agent.bullets:
+                        bullet_strs = [f"{int(b.x)},{int(b.y)}" for b in agent.bullets]
+                        pos_data += "|" + "|".join(bullet_strs)
+
                     opponent_data = n.send(pos_data)
-                    if opponent_data == "GAME_OVER":
+                    
+                    #if opponent_data is None:
+                    #    print("Server not responding - attempting to reconnect")
+                    #    if not n.connect():
+                    #        print("Reconnection failed")
+                    #        continue
+                    
+                    if opponent_data == "OPPONENT_DISCONNECTED":
+                        continue
+                        
+                    elif opponent_data == "GAME_OVER_WIN":
                         game_over = True
-                        winner = 1 if player_id == 0 else 0
+                        winner = agent.player_id
+                        
                     elif opponent_data:
-                        opp_x, opp_y = map(int, opponent_data.split(','))
+                        parts = opponent_data.split('|')
+                        opp_data = parts[0].split(',')
+                        opp_x, opp_y, opp_alive = map(int, opp_data[:3])
                         opponent.update_position(opp_x, opp_y)
+                        opponent.alive = bool(opp_alive)
+
+                        if not opponent.alive:
+                            game_over = True
+                            winner = agent.player_id
+                            n.send("GAME_OVER")
+                            continue
+                        
+                        # Update opponent bullets
+                        opponent.bullets.clear()
+                        if len(parts) > 1:
+                            for bullet_str in parts[1:]:
+                                if bullet_str:
+                                    bx, by = map(int, bullet_str.split(','))
+                                    opponent.bullets.append(Bullet(bx, by, opponent.dx, 0, opponent.player_id))
+                        
+                       
+                    
                     last_network_time = current_time
+                    
                 except Exception as e:
                     print(f"Network error: {e}")
-                    running = False
-
+                    # Continue running despite network errors
             # Update game state
             agent.update_bullets()
             opponent.update_bullets()
@@ -259,7 +294,10 @@ def main():
                         game_over = True
                         winner = agent.player_id
                         try:
-                            n.send("GAME_OVER")
+                            response = n.send("GAME_OVER")
+                            if response != "GAME_OVER":
+                                print(f"Failed to notify server of game over, error is in main() and check bullet collision")
+                                n.send("GAME_OVER")
                         except:
                             pass
             

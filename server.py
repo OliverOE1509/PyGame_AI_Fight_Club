@@ -19,8 +19,8 @@ print("Waiting for connections, Server started")
 
 players_lock = Lock()
 players = {
-    0: {"x": 3, "y": 10, 'connected': False, 'addr': None},  # Player 1
-    1: {"x": 17, "y": 10, 'connected': False, 'addr': None}  # Player 2
+    0: {"x": 3, "y": 10, 'connected': False, 'addr': None, 'bullets': [], 'alive': True, 'health': 3},  # Player 1
+    1: {"x": 17, "y": 10, 'connected': False, 'addr': None, 'bullets': [], 'alive': True, 'health': 3}  # Player 2
 }
 
 def reset_players(player_id):
@@ -29,7 +29,10 @@ def reset_players(player_id):
             'x': 3 if player_id == 0 else 17,
             'y': 10,
             'connected': False,
-            'addr': None
+            'addr': None,
+            'bullets': [],
+            'alive': True,
+            'health': 3
         }
 
 def find_available_slot():
@@ -39,6 +42,8 @@ def find_available_slot():
                 player['connected'] = True
                 return player_id
         return None
+
+
 
 def threaded_client(conn, addr, player_id):
     try:
@@ -50,40 +55,66 @@ def threaded_client(conn, addr, player_id):
         print(f"Player {player_id} initialized from {addr}")
         
         while True:
-            # Receive player data
             try:
-                data = conn.recv(2048).decode()
+                data = conn.recv(2048).decode().strip()
                 if not data:
                     print(f"Player {player_id} disconnected")
                     break
 
-                if data == "GAME_OVER":
-                    opponent_id = 1 if player_id == 0 else 0
-                    break
+                if data == "RESET":
+                    reset_players(player_id)
+                    continue
+                    #opponent_id = 1 - player_id
+                    #with players_lock:
+                    #    if players[opponent_id]['connected']:
+                    #        try:
+                    #            conn.sendall(str.encode("GAME_OVER"))
+                    #        except:
+                    #            pass
+                    #break
+
+                parts = data.split('|')
+                if not parts or not parts[0]:
+                    continue
                 
-                # Update player position
                 try:
-                    x, y = map(int, data.split(','))
+                    # Process position and bullets
+                    x, y = map(int, parts[0].split(','))
+                    bullet_data = [b for b in parts[1:] if b] if len(parts) > 1 else []
+
                     with players_lock:
                         players[player_id]['x'] = x
                         players[player_id]['y'] = y
-                    
-                    # Send opponent's position
-                    opponent_id = 1 if player_id == 0 else 0
+                        players[player_id]['bullets'] = bullet_data
+
+                    opponent_id = 1 - player_id
+                    reply = None
                     with players_lock:
                         if players[opponent_id]['connected']:
-                            reply = f"{players[opponent_id]['x']},{players[opponent_id]['y']}"
-                            conn.send(str.encode(reply))
-                except ValueError:
-                    print(f"Invalid data received from player {player_id}")
-                    break
-            except ConnectionResetError:
-                print(f"Connection reset by player {player_id}")
-                break
-                
+                            if not players[opponent_id]['alive']:
+                                reply = "GAME_OVER_WIN"
+                            else:
+                                reply = f"{players[opponent_id]['x']},{players[opponent_id]['y']},{int(players[opponent_id]['alive'])}"
+                                if players[opponent_id]['bullets']:
+                                    reply += '|' + '|'.join(players[opponent_id]['bullets'])
+                        else:
+                            reply = "OPPONENT_DISCONNECTED"
 
-    except Exception as e:
-        print(f"Error with player {player_id}: {e}")
+                    if reply:
+                        try:
+                            conn.sendall(str.encode(reply))
+                        except:
+                            print(f"Failed to send to player {player_id}")
+                            break
+                            
+                except ValueError:
+                    continue
+                
+            except ConnectionResetError:
+                break
+            except Exception as e:
+                print(f"Error with player {player_id}: {e}")
+                break
     finally:
         print(f"Closing connection with player {player_id}")
         with players_lock:
@@ -95,7 +126,7 @@ try:
     while True:
         conn, addr = s.accept()
         player_id = find_available_slot()
-        print(f"Connected to: {addr}, assigned player {player_id}")
+        #print(f"Connected to: {addr}, assigned player {player_id}")
         if player_id is not None:
             print(f"Player {player_id} connected from {addr}")
             start_new_thread(threaded_client, (conn, addr, player_id))
@@ -103,7 +134,6 @@ try:
             print("No available slots, rejecting connection")
             conn.send(str.encode("Game is full"))
             conn.close()
-            continue
         
 except KeyboardInterrupt:
     print("Server shutting down")
