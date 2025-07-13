@@ -28,9 +28,13 @@ class Network:
             return None
             
         try:
+            self.client.settimeout(2.0)
             self.client.sendall(str.encode(data))
             reply = self.client.recv(2048).decode('utf-8')
             return reply
+        except socket.timeout:
+            print("Socket timeout, no response from server")
+            return None
         except socket.error as e:
             print(f"Network error: {e}")
             self.connected = False
