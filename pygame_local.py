@@ -198,11 +198,9 @@ def main():
                             cell_size // 4)
 
         clock = pygame.time.Clock()
-        font = pygame.font.SysFont('Arial', 20)
         agent = Agent(3, 10, colors['agent1'], dx = 1, shoot_key = pygame.K_SPACE, player_id = 0)
         opponent = Agent(16, 10, colors['agent2'], dx = -1, shoot_key = pygame.K_RETURN, player_id = 1)
         running = True
-        clock = pygame.time.Clock()
         font = pygame.font.SysFont('Arial', 24, bold=True)
         running = True
         show_help = True

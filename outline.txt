@@ -1,0 +1,31 @@
+ai_fight_club/
+├── game/                           # Core game functionality
+│   ├── __init__.py
+│   ├── core.py                     # Game logic without rendering
+│   ├── render.py                   # Pygame rendering
+│   ├── environment.py              # Gym-like interface for AI
+│   └── multiplayer.py              # Multiplayer functionality
+├── models/                         # AI model implementations
+│   ├── __init__.py
+│   ├── base_agent.py               # Base agent class
+│   ├── ppo_agent.py                # PPO implementation
+│   ├── dqn_agent.py                # DQN implementation
+│   └── utils.py                    # Neural network architectures
+├── training/                       # Training scripts
+│   ├── __init__.py
+│   ├── train.py                    # Main training script
+│   ├── train_ppo.py                # PPO-specific training
+│   ├── train_dqn.py                # DQN-specific training
+│   └── eval_agent.py               # Evaluation script
+├── configs/                        # Configuration files
+│   ├── ppo_config.yaml
+│   ├── dqn_config.yaml
+│   └── game_config.yaml
+├── assets/                         # Game assets
+│   └── bullet_img.png
+├── saved_models/                   # Trained model checkpoints
+├── network.py                      # Network module (keep as is)
+├── server.py                       # Server module (keep as is)
+├── run_model.py                    # Main script to run trained models
+├── requirements.txt
+└── README.md

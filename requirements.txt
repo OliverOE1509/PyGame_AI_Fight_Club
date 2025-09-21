@@ -1,2 +1,7 @@
 pygame==2.6.1
-threadpoolctl==3.3.0 # I think this is a requirement -Oliver
+torch
+gym
+matplotlib
+tensorboard
+pyyaml
+numpy
