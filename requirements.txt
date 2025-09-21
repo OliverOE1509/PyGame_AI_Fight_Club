@@ -5,3 +5,5 @@ matplotlib
 tensorboard
 pyyaml
 numpy
+gymnasium
+stable-baselines3

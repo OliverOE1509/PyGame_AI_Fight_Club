@@ -1,4 +1,9 @@
 import pygame
+import os
+from colors import Colors
+cell_size = 30  # Should be passed from game or made configurable
+grid_size = 20  # Should be passed from game or made configurable
+screen = None   # Should be passed from game
 
 class Agent:
     def __init__(self, x, y, color, dx, shoot_key, player_id):
@@ -7,14 +12,14 @@ class Agent:
         self.color = color
         self.bullets = []
         self.dx = dx
-        self.shoot_key = shoot_key
+        #self.shoot_key = shoot_key Skal vi fjerne denne?
 
         # timer mellom hvert skudd
         self.last_shot = 0
         self.shot_cooldown = 500  # I millisekunder. 500 = 1/2 sekunder
         self.health = 3
         self.alive = True
-        self.hit_cooldown = 0
+        self.hit_cooldown = 500
         self.hit_time = 0
         self.player_id = player_id
 
@@ -48,7 +53,7 @@ class Agent:
         # Draw health bar
         if self.alive:
             health_width = (cell_size * self.health) / 3
-            pygame.draw.rect(screen, colors['health'],
+            pygame.draw.rect(screen, Colors['health'],
                            (self.x * cell_size, self.y * cell_size - 10,
                             health_width, 5))
         
@@ -60,6 +65,7 @@ class Agent:
     def shoot(self):
         now = pygame.time.get_ticks()
         if now - self.last_shot > self.shot_cooldown:
+            from bullet import Bullet
             self.bullets.append(Bullet(self.x, self.y, self.dx, 0))
             self.last_shot = now
 
