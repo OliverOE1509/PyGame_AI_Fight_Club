@@ -244,10 +244,10 @@ class AIFightClubCore:
         reward = 0.0
         
         # Small penalty for each step to encourage faster games
-        reward -= 0.01
+        reward -= 0.001
         
         # Reward for hitting opponent
-        reward += self.agent['score'] * 0.5
+        reward += self.agent['score'] * 1.0
         self.agent['score'] = 0  # Reset for next step
         
         # Penalty for getting hit
@@ -495,7 +495,7 @@ def create_env(render_mode=None):
     env = AIFightClubEnv(render_mode=render_mode)
     return env
 
-def train_model(total_timesteps=100000):
+def train_model(total_timesteps=1000000):
     """Train the model with progress tracking"""
     
     # Create environment
